@@ -1,0 +1,276 @@
+---
+title: "**MEZCLAS DE DISTRIBUCIONES**"
+author: "*Iker Sánchez Palacios*"
+output: html_document
+---
+```{r, include=FALSE}
+options(width = 60)
+local({
+  hook_output <- knitr::knit_hooks$get('output')
+  knitr::knit_hooks$set(output = function(x, options) {
+    if (!is.null(options$max.height)) options$attr.output <- c(
+      options$attr.output,
+      sprintf('style="max-height: %s;"', options$max.height)
+    )
+    hook_output(x, options)
+  })
+}) #Obtenido de https://bookdown.org/yihui/rmarkdown-cookbook/hook-scroll.html
+# Permite crear ventanas desplazables en el output de chunks con el argumento max.height='nnpx'
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+#Librerías
+library(nortest) #Pruebas de bondad de ajuste
+library(MASS) #Algunas herramientas estadísticas
+library(mixR) #Calibración de parámetros en mixturas
+library(distr) #Manipular distribuciones de proba (censurar,sumar,dividir,etc)
+library(ggplot2) #Gráficas
+library(goftest) #KS test
+```
+
+## **PRUEBAS DE BONDAD DE AJUSTE**
+El estadístico de prueba de Kolmogorov-Smirnov, en general, cuantifica la distancia entre la función de distribución empírica de una muestra contra la de una distribución de referencia. El test asociado a esta prueba determina si los datos provienen de la distribución.
+
+Compararemos la función de distribución acumulada teórica asociada a cada modelo propuesto con la de cada conjunto de datos que se pretende modelar, podemos llevar a cabo la regla de decisión con base en el p-value de la prueba. Los tests se muestran al final de cada apartado relacionado con cada modelo. Se requerirá de la paquetería *goftest*.
+
+Si bien el contraste de los criterios de Akaike y Bayesiano se deben llevar a cabo entre modelos cuyo p-value asociado a alguna prueba de bondad de ajuste sea mayor que el nivel de significancia, por términos de practicidad (aunque de una manera errónea), los contrastes de modelos se llevarán a cabo en primer lugar.
+
+
+## **ACIDITY**
+Es un conjunto de medidas de un índice de acidez medido en una muestra de 155 lagos en Wisconsin del norte. Probaremos diferentes estimaciones, considerando que el número de modas que, de manera aproximada pueden visualizarse, son 2:
+
+```{r echo=FALSE, fig.align='center'}
+acidity <- read.table("C:\\Users\\ASUS\\Downloads\\acidity.txt")
+acidity <- unname(unlist(acidity))
+df <- data.frame(x = acidity)
+col1 <- "#4DC020"
+col2 <- "#31412B"
+
+ggplot(df, aes(x = x, fill = after_stat(x))) +
+  geom_histogram( bins = 35, color = "black") +
+  scale_fill_gradient(low = col1, high = col2, guide = "none") +
+  theme_minimal()
+
+
+```
+
+
+Se contrastaron dos modelos de mezclas normales. El primer modelo consideró dos componentes, mientras que el segundo consideró tres. Si bien el modelo con tres componentes tuvo un menor AIC y una mayor log-verosimilitud, considerando el objetivo de clasificar las observaciones, usar tres componentes genera probabilidades de pertenencia muy similares en dos grupos de tres. Se optó entonces por el modelo siguiente:
+
+$$X \sim Normal(\mu = 4.3302202, \sigma = 0.3726761) \hspace{0.1cm}, \hspace{0.3cm} Y \sim Normal(\mu = 6.2492839, \sigma = 0.5195502)$$
+
+$$f_Z(x) = 0.5962217 \cdot f_X(x) + 0.4037783 \cdot f_Y(x)  $$
+Donde $\small{f_Z}$ es la densidad asociada al modelo elegido, cuyos coeficientes fueron obtenidos mediante la función *mixfit()* de la paquetería *mixR*.
+$$ $$
+
+```{r include=FALSE}
+# Modelo no elegido
+# fita <- mixfit(acidity, family = 'normal', 3) 
+# fita
+# plot(fita)
+
+# Modelo elegido
+fitb <- mixfit(acidity, family = 'normal', 2)
+#fitb
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.align='center'}
+plot(fitb)
+```
+
+$$ $$
+
+Las probabilidades de pertenencia a cada grupo permiten una distinción más clara en la clasificación. Se adjuntan a continuación:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, max.height='150px'}
+fitb$comp.prob
+```
+
+La densidad asociada a la mezcla puede graficarse directamente en R como se muestra a continuación:
+
+```{r echo=TRUE, fig.align='center'}
+mezcla1 <- UnivarMixingDistribution(Norm(mean = 4.3302202, sd = 0.3726761),
+                                    Norm(mean = 6.2492839, sd = 0.5195502),
+                                    mixCoeff = c( 0.5962217, 0.4037783))
+dmezcla1 <- d(mezcla1)
+curve(dmezcla1(x), from = 2, to = 10,  xlab = 'z', ylab = 'fz')
+```
+
+Además, la prueba de bondad de ajuste de Kolmogorov-Smirnov se realiza como se muestra a continuación:
+
+```{r warning=FALSE}
+# Definimos la función de distribución de la mezcla
+pmezcla1 <- p(mezcla1)
+
+#Hacemos el test KS
+gof_result <- ks.test(acidity,"pmezcla1")
+print(gof_result) #p-value = 0.91 > 0.05
+
+```
+
+Con una significancia de 0.05, no hay evidencia en contra de que la simulación de la mezcla del modelo y acidity tengan la misma distribución acumulativa. Es decir, el modelo no se rechaza.
+
+
+
+
+
+
+## **GALAXY**
+Contiene datos de la velocidad con la que 82 galaxias distintas se alejan de nuestra propia galaxia.
+
+```{r echo=FALSE, fig.align='center'}
+galaxy <- read.table("C:\\Users\\ASUS\\Downloads\\galaxy.txt")
+galaxy <- unname(unlist(galaxy))
+col1 <- '#EB01FF' 
+col2 <- '#46186F'
+paleta <- colorRampPalette(c(col1, col2))(80)
+
+df <- data.frame(x = galaxy)
+
+ggplot(df, aes(x = x, fill = after_stat(x))) +
+  geom_histogram( bins = 35, color = "black") +
+  scale_fill_gradient(low = col1, high = col2, guide = "none") +
+  theme_minimal()
+```
+
+Las siguientes estimaciones de parámetros generan al menos tres modelos candidatos. No obstante, visualmente puede verificarse que la densidad de la agrupación del medio tiene una curtosis muy alta para contrastarse con la de una densidad normal, así, puesto que ni el modelo $x$ ni el modelo $y$ podrán asemejarse lo suficiente en ese sentido, puede ser una mejor opción optar por el modelo $x$ si lo que se desea es distinguir distintas agrupaciones de datos, o bien el modelo $k$, abordando de cierta manera el problema de la curtosis y la perceptible asimetría alrededor del 20.
+
+```{r, fig.align='center'}
+fitx <- mixfit(galaxy, family = 'normal', 3)
+plot(fitx)
+fity <- mixfit(galaxy, family = 'normal', 4)
+plot(fity)
+fitk <- mixfit(galaxy, family = 'lnorm', 3)
+plot(fitk)
+fitk
+```
+
+Los criterios de Akaike y Bayesiano, así como la log-Verosimilitud de las estimaciones respaldan el argumento inicial, mostrando que el modelo $k$ es el modelo más cercano de los tres a la distribución real de los datos.
+
+
+```{r}
+fitx
+fity
+fitk
+```
+
+Finalmente, las probabilidades de pertenencia a cada grupo bajo el modelo elegido permiten una distinción clara entre la agrupación final de las observaciones. Se adjuntan a continuación:
+
+```{r, max.height='140px'}
+fitk$comp.prob
+```
+$$ $$
+Por otro lado, la densidad asociada a la mezcla propuesta es la siguiente:
+$$ $$
+
+$$X \sim Lnorm(\mu = 9.7100864, \sigma = 0.4187566) \hspace{0.1cm}, \hspace{0.3cm} Y \sim Lnorm(\mu = 21.4049185 , \sigma = 2.2120164) \hspace{0.1cm},$$
+$$ W \sim Lnorm(\mu = 33.0455643, \sigma = 0.9173617)$$
+
+$$f_Z(x) = 0.0853659 \cdot f_X(x) + 0.8781181 \cdot f_Y(x) + 0.0365161 \cdot f_W(x)  $$
+
+```{r echo=FALSE, fig.align='center'}
+mezcla2 <- UnivarMixingDistribution(Lnorm(meanlog = 2.2722361, sdlog = 0.0431059),
+                                    Lnorm(meanlog = 3.0583091, sdlog = 0.1030667),
+                                    Lnorm(meanlog = 3.4975042, sdlog = 0.0277519),
+                                    mixCoeff = round(c(0.0853659, 0.8781181, 0.0365161), 4))
+dmezcla2 <- d(mezcla2)
+curve(dmezcla2, from = 5, to = 40)
+```
+
+Además, la prueba de bondad de ajuste de Kolmogorov-Smirnov se realiza como se muestra a continuación:
+
+```{r}
+
+# Definimos la función de distribución acumulada de la mezcla
+pmezcla2 <- p(mezcla2)
+
+#Hacemos el test KS
+gof_result <- ks.test(galaxy, "pmezcla2")
+print(gof_result) #p-value = 0.4229 > 0.05
+
+
+```
+
+Con una significancia de 0.05, no hay evidencia en contra de que galaxy tenga la misma distribución del modelo propuesto. Así, es plausible que los datos sigan la misma distribución propuesta por el modelo.
+
+
+
+
+
+## **ENZYME**
+Es un conjunto que mide la presencia de una enzima involucrada en el metabolismo de sustancias cancerígenas.
+
+```{r echo=FALSE, fig.align='center'}
+enzyme <- read.table("C:\\Users\\ASUS\\Downloads\\enzyme.txt")
+enzyme <- unname(unlist(enzyme))
+col1 <- '#2A94F6'
+col2 <- '#00326F'
+paleta <- colorRampPalette(c(col1, col2))(80)
+df <- data.frame(x = enzyme)
+
+ggplot(df, aes(x = x, fill = after_stat(x))) +
+  geom_histogram( bins = 35, color = "black") +
+  scale_fill_gradient(low = col1, high = col2, guide = "none") +
+  theme_minimal()
+```
+
+Probaremos diferentes estimaciones, esta vez contemplando un posible comportamiento gamma en la densidad empírica, especialmente en alrededor del valor x = 1. Por un argumento similar, se considerará la estimación de un modelo de mezclas weibull. Observe que, por la alta curtosis alrededor del 0.25, una mezcla de normales podría estar perdiendo información. Se considerarán 2 modas aparentes:
+
+```{r fig.align='center'}
+fitw <- mixfit(enzyme, family = 'weibull', 2)
+fitg <- mixfit(enzyme, family = 'gamma', 2)
+fitn <- mixfit(enzyme, family = 'normal', 2)
+#plot(fitw)
+#plot(fitn) 
+plot(fitg) #Las gráficas lucen iguales por una posible limitación de la función mixfit
+
+```
+
+Podemos verificar qué modelo es plausible con base en los criterios de información de Akaike y Bayesiano:
+
+```{r}
+fitw
+fitg
+fitn
+```
+
+Así, con base en los criterios de información, verificamos que el modelo de mezclas Gamma tiene los menores valores AIC y BIC, mientras que su log-verosimilitud tiene el valor más alto, siendo un candidato prácticamente ideal entre las tres propuestas. Se adjuntan las probabilidades de pertenencia a las agrupaciones generadas por cada densidad en la mezcla de densidades gamma:
+
+```{r , max.height = '150px'}
+fitg$comp.prob
+```
+$$ $$
+
+Finalmente la densidad de la mezcla es la siguiente:
+
+$$ $$
+$$X \sim Gamma(\alpha = 4.9712891, \lambda =  1/25.6253070) \hspace{0.1cm}, \hspace{0.3cm} Y \sim Gamma(\alpha = 8.9117187, \lambda = 1/6.7483307) $$
+$$f_Z(x) = 0.6198645 \cdot f_X(x) + 0.3801355 \cdot f_Y(x)  $$
+
+```{r echo=FALSE, fig.align='center'}
+mezcla3 <- UnivarMixingDistribution(Gammad(shape = 4.9712891, scale = 1/25.6253070),
+                                    Gammad(shape = 8.9117187, scale = 1/6.7483307),
+                                    mixCoeff = c(0.6198645, 0.3801355))
+dmezcla3 <- d(mezcla3)
+curve(dmezcla3, from = 0, to = 3)
+```
+
+
+Además, la prueba de bondad de ajuste de Kolmogorov-Smirnov se realiza como se muestra a continuación:
+
+```{r}
+
+# Definimos la función de distribución acumulada de la mezcla
+pmezcla3 <- p(mezcla3)
+
+
+#Hacemos el test KS
+gof_result <- ks.test(galaxy, "pmezcla3")
+print(gof_result) #p-value < 2.2e-16 < 0.05
+
+```
+
+Con una significancia de 0.05, hay evidencia en contra de que simulated_data y galaxy tengan la misma distribución acumulativa. Por lo tanto, no es plausible que los datos sigan la distribución del modelo propuesto, y con ello, realmente la interpretación de los valores en AIC y BIC resulta de poca utilidad o cuestionable en la elección de este modelo. 
+
+
+
